@@ -1,0 +1,6 @@
+# Lo que deja scripts/build.sh: se sube como release de GitHub, nunca al repositorio.
+/dist/
+
+# Una vinculación de prueba (tiene el token del agente).
+agent.json
+*.log
