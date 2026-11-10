@@ -57,8 +57,13 @@ func main() {
 		}
 		tray.Run(version)
 	case "":
-		// Doble clic: instalado → la bandeja; descargado → el instalador.
+		// Doble clic: instalado → la bandeja (o, sin vincular, pide el código); descargado → el
+		// instalador, que también actualiza uno ya instalado y conserva su vinculación.
 		if runtime.GOOS == "windows" && install.Installed() {
+			if cfg, _ := config.Load(); !cfg.Paired() {
+				withConsole(func() error { return cmdPair(nil) })
+				return
+			}
 			if !tray.AlreadyRunning() {
 				tray.Run(version)
 			}
@@ -114,7 +119,8 @@ func usage() {
 	fmt.Print(`zertixpos-agent ` + version + ` — agente de impresión de ZertixPOS
 
 Uso:
-  zertixpos-agent                    Doble clic: instala (o abre el ícono si ya está instalado)
+  zertixpos-agent                    Doble clic: instala o actualiza; ya instalado abre el ícono
+                                     (o pide el código si quedó sin vincular)
   zertixpos-agent install [--server URL]
                                      Copia el agente, pide el código y registra el servicio
   zertixpos-agent uninstall [--purge]
@@ -177,9 +183,18 @@ func cmdPair(args []string) error {
 	if err := fs.Parse(reorder(args)); err != nil {
 		return err
 	}
+	// En Windows la vinculación vive en ProgramData, que solo el administrador puede escribir.
+	if runtime.GOOS == "windows" && !install.IsAdmin() {
+		fmt.Println("Hace falta permiso de administrador: Windows te lo va a pedir.")
+		if err := install.Elevate(append([]string{"pair"}, args...)); err != nil {
+			return fmt.Errorf("no se pudo pedir el permiso de administrador: %w", err)
+		}
+		os.Exit(0)
+	}
 	code := fs.Arg(0)
 	if code == "" {
-		code = console.Ask("Código de 6 dígitos (Configuración → Impresoras → Agregar equipo): ")
+		fmt.Println("En ZertixPOS: Configuración → Impresoras → Agregar equipo (o Volver a vincular).")
+		code = console.Ask("Código de 6 dígitos: ")
 	}
 	cfg, err := install.Pair(context.Background(), centralURL(*server), code, version)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/Elian-D/zertixpos-print-agent/internal/agent"
 	"github.com/Elian-D/zertixpos-print-agent/internal/config"
 	"github.com/Elian-D/zertixpos-print-agent/internal/icon"
+	"github.com/Elian-D/zertixpos-print-agent/internal/install"
 )
 
 const maxPrinters = 10
@@ -53,6 +54,11 @@ func onReady(version string) {
 	mNone := mTest.AddSubMenuItem("Sin impresoras: agrégalas en ZertixPOS", "")
 	mNone.Disable()
 
+	// Sin vincular (se desvinculó, se borró el equipo o se restableció el negocio): pide el código
+	// en una ventana con permiso de administrador, sin comandos.
+	mPair := systray.AddMenuItem("Vincular con un código…", "Pide el código en Configuración → Impresoras de ZertixPOS")
+	mPair.Hide()
+
 	mScan := systray.AddMenuItem("Buscar impresoras en la red", "La lista aparece en Configuración → Impresoras")
 	mOpen := systray.AddMenuItem("Abrir ZertixPOS", "")
 	mLog := systray.AddMenuItem("Ver registro", "")
@@ -79,6 +85,7 @@ func onReady(version string) {
 			systray.SetTooltip("ZertixPOS: el servicio del agente no está corriendo")
 			mBusiness.Hide()
 			mLast.Hide()
+			mPair.Hide()
 			for _, s := range slots {
 				s.Hide()
 			}
@@ -86,7 +93,7 @@ func onReady(version string) {
 		case !st.Paired:
 			systray.SetIcon(icon.ICO(icon.Gray))
 			mStatus.SetTitle("Sin vincular")
-			systray.SetTooltip("ZertixPOS: sin vincular")
+			systray.SetTooltip("ZertixPOS: sin vincular. Clic en \"Vincular con un código…\"")
 		case st.Online && st.Doorbell:
 			systray.SetIcon(icon.ICO(icon.Green))
 			mStatus.SetTitle("Conectado")
@@ -105,8 +112,15 @@ func onReady(version string) {
 			systray.SetTooltip("ZertixPOS: sin conexión")
 		}
 
+		if st.Paired {
+			mPair.Hide()
+		} else {
+			mPair.Show()
+			mBusiness.Hide()
+		}
+
 		serverURL = st.ServerURL
-		if st.Business != "" {
+		if st.Paired && st.Business != "" {
 			mBusiness.SetTitle(fmt.Sprintf("%s · %s", st.Business, st.AgentName))
 			mBusiness.Show()
 		}
@@ -161,6 +175,11 @@ func onReady(version string) {
 	go func() {
 		for {
 			select {
+			case <-mPair.ClickedCh:
+				// El servicio toma la vinculación nueva solo, en unos segundos.
+				if err := install.Elevate([]string{"pair"}); err != nil {
+					notify("No se pudo abrir la vinculación: " + err.Error())
+				}
 			case <-mScan.ClickedCh:
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				_, _ = agent.LocalPost(ctx, "/scan")
