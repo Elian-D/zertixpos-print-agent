@@ -126,7 +126,25 @@ Lo mismo funciona con el `.exe` en Windows (`pair` y `run`). Los nombres `*.loca
 | Gris | Sin vincular o sin conexión con ZertixPOS |
 | Rojo | El servicio no está corriendo |
 
-El menú trae el negocio y el equipo, el último ticket, **Imprimir prueba** (por impresora, sin pasar por el servidor), **Buscar impresoras en la red**, **Abrir ZertixPOS** y **Ver registro**. "Cerrar este ícono" solo cierra el ícono: el servicio sigue imprimiendo.
+El menú trae el negocio y el equipo, el último ticket, **Imprimir prueba** (por impresora, sin pasar por el servidor), **Buscar impresoras en la red**, **Vincular con un código…**, **Abrir ZertixPOS** y **Ver registro**. "Cerrar este ícono" solo cierra el ícono: el servicio sigue imprimiendo.
+
+### Volver a vincular (0.1.1)
+
+Si el equipo se borró en ZertixPOS, o se quiere pasar a otro negocio, no hace falta reinstalar ni escribir comandos:
+
+1. En ZertixPOS: Configuración → Impresoras → **Agregar equipo**, y copiar el código.
+2. En la PC, cualquiera de estas:
+   - Ícono de la bandeja → **Vincular con un código…**
+   - **Doble clic** en `zertixpos-agent.exe` (el instalado o uno descargado de nuevo). Sin vinculación, pide el código.
+3. Windows pide permiso de administrador; se escribe el código. El servicio toma la vinculación nueva solo, en unos segundos.
+
+Desde una consola sigue sirviendo `zertixpos-agent.exe pair`: se eleva solo a administrador.
+
+### Al apagar o detener el agente (0.1.1)
+
+Al detenerse (apagar la PC, detener el servicio, desinstalar), el agente avisa a ZertixPOS (`/offline`) y el equipo pasa a "Sin conexión" enseguida, en vez de seguir "En línea" hasta 75 s. El TPV abre el ticket en el navegador.
+
+Un corte de luz no avisa. Para eso el TPV espera la confirmación de cada ticket (12 s, más 10 s si el agente ya lo tomó). Si no salió, lo saca de la fila del agente (nunca sale dos veces) y lo abre en el navegador.
 
 ### Dónde guarda las cosas
 
@@ -139,6 +157,10 @@ El menú trae el negocio y el equipo, el último ticket, **Imprimir prueba** (po
 En Linux, `~/.config/zertixpos-agent/`. `ZERTIX_AGENT_DIR` la cambia.
 
 ### Desinstalar
+
+Desde 0.1.1, como cualquier programa: **Configuración de Windows → Aplicaciones → Aplicaciones instaladas → "ZertixPOS - Agente de impresión" → Desinstalar**. Detiene el servicio, quita el ícono de la bandeja y borra la vinculación (`uninstall --purge`). Un agente 0.1.0 aparece ahí en cuanto se actualiza solo a 0.1.1.
+
+Desde una consola de administrador, lo mismo:
 
 ```powershell
 & "C:\Program Files\ZertixPOS\Agente\zertixpos-agent.exe" uninstall | Out-Host          # deja la vinculación
@@ -179,6 +201,10 @@ Los negocios descargan el agente del **release de GitHub** de este repositorio. 
 
 Los agentes se actualizan solos. En el siguiente aviso de vida comparan su versión con `PRINT_AGENT_VERSION`; si la publicada es más nueva, bajan el `.exe`. Esto se revisa cada 6 horas como máximo. El agente comprueba que lo bajado sea un ejecutable, deja el actual como `.old` y se reinicia como servicio. Solo el servicio de Windows se actualiza; `run` y Linux no.
 
+**No hace falta borrar el agente instalado para actualizarlo.** Se actualiza solo. Para no esperar, se baja el `.exe` nuevo y se le da doble clic: el instalador reemplaza al instalado y conserva su vinculación.
+
+**El orden importa:** primero el release en GitHub, después `PRINT_AGENT_VERSION` en el VPS. Al revés, los agentes intentan bajar una versión que todavía no existe (no se rompe nada: lo vuelven a intentar en el siguiente aviso, pero el registro se llena de errores).
+
 `PRINT_AGENT_DOWNLOAD_URL` (opcional, con `{version}`) cambia de dónde se baja.
 
 ---
@@ -196,6 +222,7 @@ Todo va por HTTPS al subdominio del negocio, con `Authorization: Bearer <token>`
 | Firma | `POST /api/print-agent/broadcasting/auth` `{socket_id, channel_name}` | La firma para suscribirse al canal (solo el propio) |
 | Trabajos | `GET /api/print-agent/jobs` → `POST /jobs/{id}/claim` → `POST /jobs/{id}/complete` `{ok, error}` | Pedir, tomar (devuelve el ESC/POS en base64 y la impresora) y confirmar |
 | Búsqueda | `POST /api/print-agent/discovered` `{printers: [...]}` | Lo encontrado en la red y en Windows. Una impresora con la misma MAC y otra IP se actualiza sola |
+| Al detenerse | `POST /api/print-agent/offline` (0.1.1) | "Me apago": el equipo pasa a "Sin conexión" sin esperar los 75 s |
 
 - **Un trabajo nunca se pierde por un corte del WebSocket:** el aviso de vida trae cuántos esperan, y al reconectar el agente pide los pendientes.
 - **Si la impresora de red no responde en su IP,** el agente la busca por su MAC en la red: el router le pudo cambiar la IP.
