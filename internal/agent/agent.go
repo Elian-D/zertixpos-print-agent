@@ -156,6 +156,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	log.Printf("vinculado a %s (%s) como %q", a.cfg.Business, a.cfg.ServerURL, a.cfg.AgentName)
 
+	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -169,11 +170,35 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			wg.Wait()
+			// Se detiene (Windows apaga el servicio, Ctrl+C o una actualización): se avisa, así el
+			// TPV deja de mandarle tickets ya, sin esperar los 75 s del último aviso de vida. Si se
+			// desvinculó (401), no hay a quién avisar.
+			if parent.Err() != nil {
+				a.notifyOffline()
+			}
 			return ctx.Err()
 		case <-a.wake:
 			a.processPending(ctx)
 		}
 	}
+}
+
+// notifyOffline avisa "me detengo" con poco tiempo: Windows le da al servicio unos segundos para
+// apagarse y un servidor que no responde no puede trabar el apagado de la PC.
+func (a *Agent) notifyOffline() {
+	a.mu.RLock()
+	client := a.client
+	a.mu.RUnlock()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Offline(ctx); err != nil {
+		log.Printf("no se pudo avisar que el agente se detiene: %v", err)
+		return
+	}
+	log.Printf("avisado: el agente se detiene")
 }
 
 // ===== Aviso de vida =====

@@ -154,6 +154,13 @@ func (c *Client) Heartbeat(ctx context.Context, hostname string) (*Heartbeat, er
 	return &out, err
 }
 
+// Offline avisa que el agente se detiene (se apaga la PC o se detiene el servicio): ZertixPOS lo
+// da por desconectado enseguida y el TPV abre el ticket en el navegador, en vez de mandárselo a un
+// equipo que ya no lo va a imprimir. Desde 0.1.1; un servidor sin la ruta responde 404 y no pasa nada.
+func (c *Client) Offline(ctx context.Context) error {
+	return c.do(ctx, http.MethodPost, "/api/print-agent/offline", map[string]any{}, nil, true)
+}
+
 // Pending lista los trabajos que esperan.
 func (c *Client) Pending(ctx context.Context) ([]int64, error) {
 	var out struct {
