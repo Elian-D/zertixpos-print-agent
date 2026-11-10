@@ -124,6 +124,9 @@ func Run(ctx context.Context, central, version string) error {
 	startTray()
 	fmt.Println("4. Ícono en la bandeja (junto al reloj)")
 
+	// 5. En Configuración → Aplicaciones instaladas, para desinstalarlo sin comandos.
+	RegisterUninstall(version)
+
 	fmt.Println()
 	fmt.Println("Listo. Agrega las impresoras en ZertixPOS: Configuración → Impresoras.")
 	return nil
@@ -139,6 +142,7 @@ func Uninstall(purge bool) error {
 		k.Close()
 	}
 	stopTray()
+	_ = registry.DeleteKey(registry.LOCAL_MACHINE, uninstallKey)
 	if purge {
 		_ = os.RemoveAll(config.Dir())
 	}
@@ -146,6 +150,32 @@ func Uninstall(purge bool) error {
 	path, _ := windows.UTF16PtrFromString(ExePath())
 	_ = windows.MoveFileEx(path, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
 	return nil
+}
+
+// uninstallKey es la entrada de "Aplicaciones instaladas" (Agregar o quitar programas).
+const uninstallKey = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ZertixPOSAgent`
+
+// RegisterUninstall deja el agente en Configuración → Aplicaciones → Aplicaciones instaladas, con
+// su versión y "Desinstalar" (que corre `uninstall --purge`). Lo llaman el instalador y el servicio
+// al arrancar, así la versión se mantiene al día después de una actualización automática. Necesita
+// permiso de administrador (el servicio corre como SYSTEM); si no lo tiene, no hace nada.
+func RegisterUninstall(version string) {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, uninstallKey, registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	exe := ExePath()
+	_ = k.SetStringValue("DisplayName", "ZertixPOS - Agente de impresión")
+	_ = k.SetStringValue("DisplayVersion", version)
+	_ = k.SetStringValue("Publisher", "ZertixPOS")
+	_ = k.SetStringValue("DisplayIcon", exe)
+	_ = k.SetStringValue("InstallLocation", Dir())
+	_ = k.SetStringValue("UninstallString", fmt.Sprintf(`"%s" uninstall --purge`, exe))
+	_ = k.SetStringValue("URLInfoAbout", "https://zertixpos.com")
+	_ = k.SetDWordValue("NoModify", 1)
+	_ = k.SetDWordValue("NoRepair", 1)
+	_ = k.SetDWordValue("EstimatedSize", 8*1024) // KB
 }
 
 func startTray() {

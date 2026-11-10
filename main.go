@@ -224,6 +224,10 @@ func centralURL(flagValue string) string {
 func runService() {
 	closeLog := setupLog(false)
 	defer closeLog()
+	// La versión en "Aplicaciones instaladas", al día después de una actualización automática.
+	if install.Installed() {
+		install.RegisterUninstall(version)
+	}
 	err := winsvc.Run(func(ctx context.Context) error {
 		return runAgent(ctx, true)
 	})

@@ -22,3 +22,5 @@ func Installed() bool { return false }
 func Run(ctx context.Context, central, version string) error { return errWindows }
 
 func Uninstall(purge bool) error { return errWindows }
+
+func RegisterUninstall(version string) {}
